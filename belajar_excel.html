@@ -291,17 +291,18 @@
                     </div>
                     <div class="form-group">
                         <label style="font-weight: 600; color: var(--primary-hover);">Nama Lengkap</label>
-                        <input type="text" id="profil-nama" class="form-control" readonly style="background: var(--surface-alt); border: none;">
+                        <!-- Kolom nama sekarang bisa diedit -->
+                        <input type="text" id="profil-nama" class="form-control" style="background: white; border: 1px solid var(--border);" placeholder="Ubah nama Anda di sini">
                     </div>
                     <div class="form-group">
                         <label style="font-weight: 600; color: var(--primary-hover);">Username / Email</label>
-                        <input type="text" id="profil-id" class="form-control" readonly style="background: var(--surface-alt); border: none;">
+                        <input type="text" id="profil-id" class="form-control" readonly style="background: var(--surface-alt); border: none; cursor: not-allowed;" title="Username/Email tidak dapat diubah">
                     </div>
                     <hr style="border:0; border-top:1px solid var(--border); margin:25px 0;">
-                    <h4 style="color: var(--primary-hover);">Ganti Kata Sandi (Peserta)</h4>
-                    <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Admin/Mentor ganti via Firebase Auth.</p>
-                    <input type="password" id="profil-pass-baru" class="form-control" placeholder="Kata Sandi Baru">
-                    <button class="btn-primary" onclick="updatePasswordPeserta()">Simpan Sandi Baru</button>
+                    <h4 style="color: var(--primary-hover);">Ubah Kata Sandi (Khusus Peserta)</h4>
+                    <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Admin/Mentor kelola sandi via Firebase Auth.</p>
+                    <input type="password" id="profil-pass-baru" class="form-control" placeholder="Sandi Baru (Kosongkan jika tidak ingin mengubah)">
+                    <button class="btn-primary" onclick="updateProfilData()" style="width: 100%; margin-top: 10px; font-size: 16px;">Simpan Perubahan Profil</button>
                 </div>
             </section>
             
@@ -1228,28 +1229,63 @@
             const file = e.target.files[0];
             if(!file) return;
             resizeImageBase64(file, async (base64Str) => {
-                document.getElementById('profil-preview').src = base64Str;
-                document.getElementById('user-avatar').src = base64Str;
-                window.currentUser.foto_profil = base64Str;
-                
-                const coll = window.activeRole === 'peserta' ? 'peserta' : 'users';
-                const docId = window.currentUser.id || window.currentUser.username_peserta;
-                await DB.set(coll, docId, { foto_profil: base64Str });
-                window.customAlert('Foto profil berhasil diubah.');
+                try {
+                    document.getElementById('profil-preview').src = base64Str;
+                    document.getElementById('user-avatar').src = base64Str;
+                    window.currentUser.foto_profil = base64Str;
+                    
+                    const coll = window.activeRole === 'peserta' ? 'peserta' : 'users';
+                    const docId = window.currentUser.id; // Menggunakan Document ID yang tepat
+                    
+                    await DB.set(coll, docId, { foto_profil: base64Str });
+                    window.customAlert('Foto profil berhasil diubah dan disimpan ke server.');
+                } catch(error) {
+                    window.customAlert('Gagal menyimpan foto profil: ' + error.message);
+                }
             });
         }
 
-        window.updatePasswordPeserta = async function() {
-            if(window.activeRole !== 'peserta') return customAlert('Admin/Mentor harus ubah sandi di konsol Firebase Auth.');
-            const pass = document.getElementById('profil-pass-baru').value;
-            if(!pass) return;
-            const docId = window.currentUser.username_peserta;
-            await DB.set('peserta', docId, { password: pass });
-            window.currentUser.password = pass;
-            document.getElementById('profil-pass-baru').value = '';
-            window.customAlert('Kata sandi berhasil diubah.');
+        window.updateProfilData = async function() {
+            try {
+                const newName = document.getElementById('profil-nama').value;
+                const newPass = document.getElementById('profil-pass-baru').value;
+                
+                if (!newName) return window.customAlert('Nama Lengkap tidak boleh kosong.');
+                
+                const coll = window.activeRole === 'peserta' ? 'peserta' : 'users';
+                const docId = window.currentUser.id; // Menggunakan Document ID yang tepat
+                
+                let payload = {};
+                if (window.activeRole === 'peserta') {
+                    payload.nama_lengkap = newName;
+                    if (newPass) payload.password = newPass;
+                } else {
+                    payload.nama = newName;
+                    if (newPass) {
+                        window.customAlert('Info: Kata sandi Admin/Mentor harus diubah melalui console Firebase Auth.');
+                    }
+                }
+                
+                // Simpan ke Firestore Database
+                await DB.set(coll, docId, payload);
+                
+                // Update Sesi Lokal agar langsung berubah tanpa perlu refresh
+                if (window.activeRole === 'peserta') {
+                    window.currentUser.nama_lengkap = newName;
+                    if (newPass) window.currentUser.password = newPass;
+                } else {
+                    window.currentUser.nama = newName;
+                }
+                
+                // Update UI Sidebar dan kosongkan textbox password
+                document.getElementById('user-name-display').innerText = newName;
+                document.getElementById('profil-pass-baru').value = ''; 
+                
+                window.customAlert('Data Profil berhasil diperbarui!');
+            } catch (error) {
+                window.customAlert('Gagal memperbarui profil: ' + error.message);
+            }
         }
-
         autoSetupDatabase().then(() => {
             console.log("Sistem Siap. Mode Preview:", IS_PREVIEW);
         });
